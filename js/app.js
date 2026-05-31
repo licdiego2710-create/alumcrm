@@ -152,8 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // Seed demo data on first run
-  try { await DB.seedDemo(); } catch(e) { console.warn('Seed skipped:', e.message); }
+  // No se cargan datos de demostración automáticamente
 
   // Navigate to hash or dashboard
   const hash = window.location.hash.replace('#', '');
