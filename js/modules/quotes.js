@@ -178,90 +178,108 @@ async function addDays(dateStr, days) {
 // ─── Quote Modal ─────────────────────────────────────
 let quoteProducts = [];
 
-function openQuoteModal(clientId = null, quoteId = null) {
-  const clients = DB.getClients();
-  const existing = quoteId ? DB.getQuote(quoteId) : null;
-  quoteProducts = existing ? JSON.parse(JSON.stringify(existing.productos || [])) : [];
-  if (quoteProducts.length === 0) quoteProducts.push(newProduct());
+async function openQuoteModal(clientId = null, quoteId = null) {
+  openModal(quoteId ? 'Editar Cotización' : 'Nueva Cotización', `
+    <div style="display:flex;align-items:center;justify-content:center;height:200px;flex-direction:column;gap:16px">
+      <div style="width:36px;height:36px;border:3px solid var(--bg-400);border-top-color:var(--gold-400);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+      <span style="color:var(--text-muted);font-size:13px">Cargando clientes y datos...</span>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `);
 
-  const title = existing ? `Cotización #${existing.num}` : 'Nueva Cotización';
+  try {
+    const [clients, existing] = await Promise.all([
+      DB.getClients(),
+      quoteId ? DB.getQuote(quoteId) : Promise.resolve(null)
+    ]);
 
-  const html = `
-    <div class="form-section">
-      <div class="form-section-title">📋 Información General</div>
-      <div class="form-grid cols-3">
-        <div class="form-group form-full">
-          <label class="form-label">Cliente<span>*</span></label>
-          <select class="form-select" id="qf-client">
-            <option value="">— Seleccionar cliente —</option>
-            ${clients.map(c => `<option value="${c.id}" ${(clientId||existing?.clientId)===c.id?'selected':''}>${escHtml(c.nombre)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Fecha</label>
-          <input class="form-input" type="date" id="qf-fecha" value="${existing?.fecha||fmt.today()}" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Validez (días)</label>
-          <input class="form-input" type="number" id="qf-validez" placeholder="30" value="${existing?.validez||'30'}" min="1" max="365" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Estado</label>
-          <select class="form-select" id="qf-estado">
-            ${['Borrador','Enviada','Aprobada','Rechazada'].map(e => `<option value="${e}" ${(existing?.estado||'Borrador')===e?'selected':''}>${e}</option>`).join('')}
-          </select>
+    quoteProducts = existing ? JSON.parse(JSON.stringify(existing.productos || [])) : [];
+    if (quoteProducts.length === 0) quoteProducts.push(newProduct());
+
+    const title = existing ? `Cotización #${existing.num}` : 'Nueva Cotización';
+
+    const html = `
+      <div class="form-section">
+        <div class="form-section-title">📋 Información General</div>
+        <div class="form-grid cols-3">
+          <div class="form-group form-full">
+            <label class="form-label">Cliente<span>*</span></label>
+            <select class="form-select" id="qf-client">
+              <option value="">— Seleccionar cliente —</option>
+              ${clients.map(c => `<option value="${c.id}" ${(clientId||existing?.clientId||existing?.client_id)===c.id?'selected':''}>${escHtml(c.nombre)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fecha</label>
+            <input class="form-input" type="date" id="qf-fecha" value="${existing?.fecha||fmt.today()}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Validez (días)</label>
+            <input class="form-input" type="number" id="qf-validez" placeholder="30" value="${existing?.validez||'30'}" min="1" max="365" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Estado</label>
+            <select class="form-select" id="qf-estado">
+              ${['Borrador','Enviada','Aprobada','Rechazada'].map(e => `<option value="${e}" ${(existing?.estado||'Borrador')===e?'selected':''}>${e}</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="form-section">
-      <div class="form-section-title">🪟 Productos / Partidas</div>
-      <div id="products-list"></div>
-      <button class="add-product-btn" onclick="addProduct()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        Agregar producto / partida
-      </button>
-    </div>
+      <div class="form-section">
+        <div class="form-section-title">🪟 Productos / Partidas</div>
+        <div id="products-list"></div>
+        <button class="add-product-btn" onclick="addProduct()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Agregar producto / partida
+        </button>
+      </div>
 
-    <div class="form-section">
-      <div class="form-section-title">💰 Totales</div>
-      <div class="form-grid cols-3">
-        <div class="form-group">
-          <label class="form-label">Descuento ($)</label>
-          <input class="form-input" type="number" id="qf-descuento" placeholder="0" value="${existing?.descuento||0}" min="0" oninput="recalcTotal()" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Subtotal</label>
-          <input class="form-input" id="qf-subtotal" readonly value="${fmt.currency(existing?.subtotal||0)}" style="opacity:0.7" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Total</label>
-          <input class="form-input" id="qf-total" readonly value="${fmt.currency(existing?.total||0)}" style="font-weight:700;color:var(--gold-300)" />
+      <div class="form-section">
+        <div class="form-section-title">💰 Totales</div>
+        <div class="form-grid cols-3">
+          <div class="form-group">
+            <label class="form-label">Descuento ($)</label>
+            <input class="form-input" type="number" id="qf-descuento" placeholder="0" value="${existing?.descuento||0}" min="0" oninput="recalcTotal()" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Subtotal</label>
+            <input class="form-input" id="qf-subtotal" readonly value="${fmt.currency(existing?.subtotal||0)}" style="opacity:0.7" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Total</label>
+            <input class="form-input" id="qf-total" readonly value="${fmt.currency(existing?.total||0)}" style="font-weight:700;color:var(--gold-300)" />
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="form-section">
-      <div class="form-section-title">📝 Notas de Cotización</div>
-      <div class="form-group">
-        <label class="form-label">Condiciones / Notas</label>
-        <textarea class="form-textarea" id="qf-notas" placeholder="Ej. Precios incluyen IVA, instalación incluida, 1 año de garantía...">${escHtml(existing?.notas||'')}</textarea>
+      <div class="form-section">
+        <div class="form-section-title">📝 Notas de Cotización</div>
+        <div class="form-group">
+          <label class="form-label">Condiciones / Notas</label>
+          <textarea class="form-textarea" id="qf-notas" placeholder="Ej. Precios incluyen IVA, instalación incluida, 1 año de garantía...">${escHtml(existing?.notas||'')}</textarea>
+        </div>
       </div>
-    </div>
 
-    <div class="modal-footer">
-      <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
-      <button class="btn-primary" onclick="saveQuote('${quoteId||''}')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
-        ${existing ? 'Guardar Cambios' : 'Guardar Cotización'}
-      </button>
-    </div>
-  `;
-  openModal(title, html);
-  renderProductsList();
-  recalcTotal();
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeModal()">Cancelar</button>
+        <button class="btn-primary" onclick="saveQuote('${quoteId||''}')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polyline points="20 6 9 17 4 12"/></svg>
+          ${existing ? 'Guardar Cambios' : 'Guardar Cotización'}
+        </button>
+      </div>
+    `;
+
+    document.getElementById('modal-title').textContent = title;
+    document.getElementById('modal-body').innerHTML = html;
+    renderProductsList();
+    recalcTotal();
+  } catch (error) {
+    showToast('Error al cargar datos: ' + error.message, 'error');
+    closeModal();
+  }
 }
 
 function editQuote(id) {
