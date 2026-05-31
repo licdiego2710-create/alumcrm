@@ -70,7 +70,13 @@ async function renderOrders(filter = 'all', search = '') {
 async function viewOrder(id) {
   const [o, payments] = await Promise.all([DB.getOrder(id), DB.getPaymentsByOrder(id)]);
   if (!o) return;
-  const cl = await DB.getClient(o.clientId || o.client_id);
+  
+  const qId = o.quoteId || o.quote_id;
+  const [cl, quote] = await Promise.all([
+    DB.getClient(o.clientId || o.client_id),
+    qId ? DB.getQuote(qId) : Promise.resolve(null)
+  ]);
+  
   const totalPagado = payments.reduce((s, p) => s + Number(p.monto||0), 0);
   const pct = o.total > 0 ? Math.round((totalPagado / Number(o.total)) * 100) : 0;
 
@@ -117,9 +123,9 @@ async function viewOrder(id) {
           ${infoRow('Fecha creación', fmt.date(o.createdAt))}
           ${infoRow('Fecha entrega', o.fechaEntrega ? fmt.date(o.fechaEntrega) : '—')}
           ${infoRow('Estado', o.estado)}
-          ${infoRow('Cotización', o.quoteId || o.quote_id ? '—' : '—')}
+          ${infoRow('Cotización', quote ? `Cotización #${quote.num}` : '—')}
         </div>
-        ${o.notas ? `<div style="margin-top:12px;padding:10px;background:var(--bg-800);border-radius:8px;font-size:12.5px;color:var(--text-secondary)">${escHtml(o.notas)}</div>` : ''}
+        ${o.notes || o.notas ? `<div style="margin-top:12px;padding:10px;background:var(--bg-800);border-radius:8px;font-size:12.5px;color:var(--text-secondary)">${escHtml(o.notes || o.notas)}</div>` : ''}
       </div>
 
       <div class="card">
@@ -144,7 +150,7 @@ async function viewOrder(id) {
     </div>
 
     <!-- Products from quote -->
-    ${orderProductsTable(o)}
+    ${orderProductsTable(quote)}
 
     <!-- Payments -->
     <div class="card" style="margin-bottom:16px">
@@ -169,11 +175,8 @@ async function viewOrder(id) {
   `;
 }
 
-function orderProductsTable(o) {
-  const quoteId = o.quoteId || o.quote_id;
-  if (!quoteId) return '';
-  // Quote products were stored inline in orders JSONB — load from quote async separately
-  return '';  // Products shown via separate async call if needed
+function orderProductsTable(q) {
+  if (!q || !q.productos || !q.productos.length) return '';
   return `
     <div class="card" style="margin-bottom:16px">
       <div class="card-title" style="margin-bottom:14px">🪟 Productos del Pedido</div>
